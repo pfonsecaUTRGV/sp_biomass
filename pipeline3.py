@@ -1,25 +1,39 @@
-import pandas as pd
+import rasterio
+from scipy.ndimage import grey_opening
+from skimage.filters import gaussian
+import numpy as np
 
-pixel_size = src.res[0]
-pixel_area = pixel_size**2
+# --- Load DSM ---
+with rasterio.open("cerro.tif") as src:
+    dsm = src.read(1)
+    profile = src.profile
 
-tree_data = []
-for i in range(1, labels.max() + 1):
-    mask = labels == i
-    if np.sum(mask) < 5:
-        continue
-    h_vals = chm[mask]
-    h_max = np.nanmax(h_vals)
-    h_mean = np.nanmean(h_vals)
-    crown_area = np.sum(mask) * pixel_area
-    crown_volume = np.nansum(h_vals) * pixel_area
-    tree_data.append({
-        "Tree_ID": i,
-        "Height_m": h_max,
-        "Mean_Height_m": h_mean,
-        "Crown_Area_m2": crown_area,
-        "Crown_Volume_m3": crown_volume
-    })
+# --- Step 1: Estimate DTM using morphological opening ---
+# The filter size should roughly match average crown size in pixels
+dtm = grey_opening(dsm, size=(15, 15))  # adjust if trees are more/less spaced
 
-df = pd.DataFrame(tree_data)
-df.to_csv("tree_metrics.csv", index=False)
+# --- Step 2: Compute raw CHM ---
+chm = dsm - dtm
+chm[chm < 0] = 0  # remove any negative values
+
+# --- Step 3: Clean CHM ---
+# Define realistic canopy range for your region (Ebano, Mesquite, Cypress)
+MIN_HEIGHT = 0
+MAX_HEIGHT = 40  # meters
+
+# Clip unrealistic heights
+num_too_high = np.sum(chm > MAX_HEIGHT)
+if num_too_high > 0:
+    print(f"Clipping {num_too_high:,} pixels above {MAX_HEIGHT} m")
+chm = np.clip(chm, MIN_HEIGHT, MAX_HEIGHT)
+
+# Smooth with a light Gaussian filter to remove small spikes
+chm_smooth = gaussian(chm, sigma=1)
+
+# --- Step 4: Save cleaned CHM ---
+profile.update(dtype="float32")
+
+with rasterio.open("CHM.tif", "w", **profile) as dst:
+    dst.write(chm_smooth.astype("float32"), 1)
+
+print("Cleaned and filtered CHM saved as 'CHM.tif'")
