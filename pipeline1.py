@@ -2,7 +2,7 @@ import rasterio
 from scipy.ndimage import grey_opening
 import numpy as np
 
-with rasterio.open("tramo3.tiff") as src:
+with rasterio.open("colonia.tif") as src:
     dsm = src.read(1)
     profile = src.profile
 

@@ -24,12 +24,41 @@ with rasterio.open("CHM.tif") as src:
     #transform = src.transform
     crs = src.crs
 
+# --- Check and rescale CHM values if too small ---
+print("CHM min:", np.nanmin(chm))
+print("CHM max:", np.nanmax(chm))
+print("CHM mean:", np.nanmean(chm))
+
+# If CHM seems to be in centimeters or normalized 0–1, rescale to meters
+if np.nanmax(chm) < 3:  # likely not in meters
+    print("CHM values seem too small — scaling by 100 (cm → m)")
+    chm = chm * 100
+elif np.nanmax(chm) < 0.1:  # possibly normalized 0–1
+    print("CHM appears normalized — scaling by 25 m expected canopy height")
+    chm = chm * 25
+
+
 # Smooth CHM slightly to remove noise
 chm_smooth = gaussian(chm, sigma=1)
 
 # Find tree tops (local maxima)
-coords = peak_local_max(chm_smooth, min_distance=2, threshold_abs=0.1)
-mask = chm_smooth > 0.2
+# --- Adaptive tree detection based on CHM statistics ---
+chm_min, chm_max, chm_mean = np.nanmin(chm), np.nanmax(chm), np.nanmean(chm)
+print(f"CHM stats → min: {chm_min:.2f}, max: {chm_max:.2f}, mean: {chm_mean:.2f}")
+
+# Estimate dynamic thresholds
+# Smaller trees → smaller thresholds, bigger trees → more conservative ones
+threshold_abs = max(0.05, 0.05 * chm_max)      # 5% of max height or at least 0.05
+min_distance = 1 if chm_max < 10 else 2 if chm_max < 20 else 3
+
+print(f"Adaptive thresholds → min_distance={min_distance}, threshold_abs={threshold_abs:.2f}")
+
+# Apply local maxima detection
+coords = peak_local_max(chm_smooth, min_distance=min_distance, threshold_abs=threshold_abs)
+mask = chm_smooth > (0.5 * threshold_abs)  # slightly lower mask to include full crowns
+print(f"Detected {len(coords)} treetop peaks")
+
+
 markers = np.zeros_like(chm_smooth, dtype=np.int32)
 for i, (r, c) in enumerate(coords, start=1):
     markers[r, c] = i
@@ -82,7 +111,7 @@ plt.show()
 
 ###########################################
 
-
+'''
 
 Image.MAX_IMAGE_PIXELS = None
 # --- Load the JPEG and TFW ---
@@ -112,7 +141,7 @@ xmax = xmin + width * a
 ymin = ymax + height * e
 
 
-'''
+
 # --- Convert your labels to polygons ---
 shapes = list(rasterio.features.shapes(labels.astype(np.int32), transform=transform))
 polys = []
@@ -122,7 +151,7 @@ for val, geom in shapes:
     polys.append({'Tree_ID': int(val), 'geometry': shape(geom)})
 
 crowns_gdf = gpd.GeoDataFrame(polys, crs=crs)
-'''
+
 
 print("CHM range (min/max):", np.nanmin(chm), np.nanmax(chm))
 print("Number of watershed labels:", labels.max())
@@ -130,7 +159,7 @@ print("Unique treetop peaks detected:", len(coords))
 
 
 # --- Convert segmentation labels to polygons (safe version) ---
-'''
+
 polys = []
 
 for (val, geom) in rasterio.features.shapes(labels.astype(np.int32), transform=transform):
@@ -156,7 +185,7 @@ if len(polys) > 0:
     print(f"Created GeoDataFrame with {len(crowns_gdf)} crowns")
 else:
     print("No valid crown geometries found — check segmentation or CHM quality")
-'''
+
 
 
 
@@ -214,3 +243,4 @@ else:
 
 plt.tight_layout()
 plt.show()
+'''
