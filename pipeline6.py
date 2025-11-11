@@ -75,20 +75,24 @@ print("Vegetation mask applied.\n")
 # ---------------------------------------------------------
 # STEP 3: Tree Detection (Tuned for Urban Scale)
 # ---------------------------------------------------------
-chm_smooth = gaussian(chm_masked, sigma=1.8)
+# ---------------------------------------------------------
+# STEP 3: Tree detection (tuned for fewer trees)
+# ---------------------------------------------------------
+chm_smooth = gaussian(chm_masked, sigma=2.5)  # stronger smoothing merges close peaks
 
 chm_min, chm_max, chm_mean = np.nanmin(chm_masked), np.nanmax(chm_masked), np.nanmean(chm_masked)
 print(f"CHM stats → min: {chm_min:.2f}, max: {chm_max:.2f}, mean: {chm_mean:.2f}")
 
-#threshold_abs = max(0.1, 0.06 * chm_max)
-threshold_abs = max(0.2, 0.10 * chm_max)   # require stronger peaksmin_distance = 4 if chm_max < 10 else 6
-min_distance = 8                           # merge close trees
+# Stricter thresholds for peak detection
+threshold_abs = max(0.25, 0.12 * chm_max)   # ignore small local peaks
+min_distance = 10                           # merge crowns that are very close
+mask = chm_smooth > (0.7 * threshold_abs)   # only tall vegetation included
+
 print(f"Adaptive thresholds → min_distance={min_distance}, threshold_abs={threshold_abs:.2f}")
 
 coords = peak_local_max(chm_smooth, min_distance=min_distance, threshold_abs=threshold_abs)
-#mask = chm_smooth > (0.35 * threshold_abs)
-mask = chm_smooth > (0.6 * threshold_abs)  # only keep tall crowns
-print(f"Detected {len(coords)} treetop peaks\n")
+print(f"Detected {len(coords)} treetop peaks before segmentation\n")
+
 
 # ---------------------------------------------------------
 # STEP 4: Watershed Segmentation
