@@ -14,7 +14,7 @@ if len(df) == 0:
     exit()
 
 # --- Forest area in hectares ---
-forest_area_ha = 87.06  # provided area
+forest_area_ha = 20.18  # provided area
 forest_area_m2 = forest_area_ha * 10_000  # convert ha → m²
 
 # --- Compute summary statistics ---
